@@ -76,6 +76,7 @@
     <p>&copy; 2026 Veridata Compliance Research Group</p>
   </div>
 </footer>
-<script>try{var r=new URLSearchParams(location.search).get("ref");if(r&&/^[A-Z0-9]{4,12}$/.test(r)){document.getElementById("ref-n").textContent=r;document.getElementById("ref").hidden=false;}}catch(e){}</script>
+<script>try{localStorage.removeItem("vcrg-form-v1")}catch(e){}
+try{var r=new URLSearchParams(location.search).get("ref");if(r&&/^[A-Z0-9]{4,12}$/.test(r)){document.getElementById("ref-n").textContent=r;document.getElementById("ref").hidden=false;}}catch(e){}</script>
 </body>
 </html>

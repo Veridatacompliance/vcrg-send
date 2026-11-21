@@ -489,10 +489,15 @@
     try { return new File([f], f.name, { type: t }); } catch (e) { return f; }
   }
   function drawToJpeg(src, w, h, name, orig, done) {
-    var scale = Math.min(1, MAX_DIM / Math.max(w, h));
-    var c = document.createElement('canvas');
-    c.width = Math.max(1, Math.round(w * scale)); c.height = Math.max(1, Math.round(h * scale));
-    c.getContext('2d').drawImage(src, 0, 0, c.width, c.height);
+    var c;
+    try {
+      var scale = Math.min(1, MAX_DIM / Math.max(w, h));
+      c = document.createElement('canvas');
+      c.width = Math.max(1, Math.round(w * scale)); c.height = Math.max(1, Math.round(h * scale));
+      var ctx = c.getContext('2d');
+      if (!ctx || !c.toBlob) { c.width = c.height = 0; return done(fixType(orig)); }
+      ctx.drawImage(src, 0, 0, c.width, c.height);
+    } catch (e) { if (c) c.width = c.height = 0; return done(fixType(orig)); }
     c.toBlob(function (b) {
       c.width = c.height = 0; // free canvas memory (iOS)
       if (!b || b.size >= orig.size) return done(fixType(orig));
@@ -502,8 +507,13 @@
   }
   function shrink(file0) {
     var file = fixType(file0);
-    return new Promise(function (resolve) {
-      if (!/^image\//i.test(file.type) || /gif$/i.test(file.type)) return resolve(file);
+    return new Promise(function (resolve0) {
+      var settled = false;
+      function resolve(r) { if (!settled) { settled = true; clearTimeout(guard); resolve0(r); } }
+      var guard = setTimeout(function () { resolve(file); }, 20000);
+      if (/(pdf|gif)$/i.test(file.type)) return resolve(file);
+      // Unknown type (some Android pickers give none): try to open it as a picture anyway.
+      if (!/^image\//i.test(file.type)) return viaImg();
       if (file.size < 900 * 1024 && /jpeg$/i.test(file.type)) return resolve(file);
       function viaImg() {
         try {
@@ -630,10 +640,14 @@
   }
 
   function sendViaFormSubmit(small) {
-    var total = small.reduce(function (t, f) { return t + f.size; }, 0);
+    var sizes = canAssign ? small : Array.prototype.slice.call(picker.files || []);
+    var total = sizes.reduce(function (t, f) { return t + f.size; }, 0);
     if (total > MAX_TOTAL) {
       resetBtn();
-      showErr('Sorry, we could not send this right now. Please try again in a few minutes, or email your photos to ashlee@veridatacompliance.org.');
+      var big = small.filter(function (f) { return f.size > API_MAX_FILE; }).map(function (f) { return f.name || 'one file'; });
+      showErr(big.length
+        ? 'This file is too large to upload: ' + big.join(', ') + '. Please remove it and send the rest, or take a photo of it with your camera instead.'
+        : 'These photos are too large to send together. Please remove a few and send them in a second form.');
       return;
     }
     if (canAssign) {
@@ -647,7 +661,7 @@
     }
     btn.textContent = 'Sending... please wait';
     status('Sending another way. You may briefly see a page from our form provider, FormSubmit, asking you to tick “I’m not a robot.”');
-    sending = false; clearSaved();
+    sending = false;
     HTMLFormElement.prototype.submit.call(form);
   }
 
@@ -672,8 +686,15 @@
       return sendViaApi(small).then(function (res) {
         btn.textContent = 'Sent!';
         sending = false; clearSaved();
+        try { form.reset(); files = []; render(); } catch (e) {}
         return notifyByEmail(res).then(function () { location.href = thanksUrl(res.ref); });
       }, function () {
+        if (navigator.onLine === false) {
+          // No signal: keep everything on screen so they can simply tap Send again.
+          resetBtn();
+          showErr('No internet connection right now. Your answers and photos are still here. Tap \u201cSend my submission\u201d again when you have signal.');
+          return;
+        }
         // Our service could not take it (down, or refused a file): send it the backup way instead.
         sendViaFormSubmit(small);
       });
