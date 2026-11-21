@@ -406,6 +406,22 @@
 </footer>
 
 <script>
+/* Anonymous visit counter: once per browser per day, no cookies or personal data. Never affects the form. */
+(function () {
+  var API = /^(localhost|127\.0\.0\.1)$/.test(location.hostname) ? 'http://localhost:3210' : 'https://vcrg-upload.vercel.app';
+  function hit(ev) {
+    try { var k = 'vcrg-hit-' + ev + '-' + new Date().toISOString().slice(0, 10); if (localStorage.getItem(k)) return; localStorage.setItem(k, '1'); } catch (e) {}
+    try {
+      if (navigator.sendBeacon && window.Blob) navigator.sendBeacon(API + '/api/hit', new Blob([ev], { type: 'text/plain' }));
+      else if (window.fetch) fetch(API + '/api/hit', { method: 'POST', body: ev, keepalive: true, headers: { 'Content-Type': 'text/plain' } }).catch(function () {});
+    } catch (e) {}
+  }
+  hit('view');
+  var f = document.getElementById('vcrg-form'), started = false;
+  if (f) f.addEventListener('focusin', function () { if (!started) { started = true; hit('start'); } });
+})();
+</script>
+<script>
 (function () {
   var form = document.getElementById('vcrg-form');
   if (!form) return;
